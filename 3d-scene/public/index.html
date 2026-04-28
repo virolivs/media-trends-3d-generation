@@ -124,6 +124,142 @@
     transition: width 0.4s ease;
   }
 
+  /* ── SCENE OBJECTS LIST ── */
+  #scene-section { display: flex; flex-direction: column; gap: 8px; }
+  #scene-section > label { margin-bottom: 0; }
+
+  #scene-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  #scene-list:empty::after {
+    content: 'Nenhum objeto na cena';
+    display: block;
+    font-size: 10px;
+    color: var(--dim);
+    padding: 6px 0;
+  }
+
+  .scene-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #111120;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative;
+  }
+  .scene-item:hover { border-color: var(--dim); }
+  .scene-item.active {
+    border-color: var(--accent);
+    background: rgba(124,109,250,0.08);
+  }
+
+  .scene-item-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--accent);
+  }
+  .scene-item.active .scene-item-dot { background: var(--accent2); }
+
+  .scene-item-name {
+    flex: 1;
+    font-size: 10px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .scene-item-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .scene-item:hover .scene-item-actions { opacity: 1; }
+
+  .scene-item-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--dim);
+    font-size: 13px;
+    padding: 2px 3px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+    line-height: 1;
+  }
+  .scene-item-btn:hover { color: var(--white); background: rgba(255,255,255,0.08); }
+  .scene-item-btn.del:hover { color: var(--accent2); }
+
+  /* position nudge controls */
+  #transform-controls {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #transform-controls.visible { display: flex; }
+
+  .transform-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .transform-row label {
+    width: 10px;
+    margin-bottom: 0;
+    color: var(--accent);
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .transform-row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--border);
+    outline: none;
+    border: none;
+    padding: 0;
+  }
+  .transform-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+  .transform-row .val {
+    font-size: 9px;
+    color: var(--dim);
+    width: 36px;
+    text-align: right;
+  }
+
+  #btn-clear-scene {
+    width: 100%;
+    padding: 9px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--dim);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: border-color 0.2s, color 0.2s;
+    text-align: center;
+  }
+  #btn-clear-scene:hover { border-color: var(--accent2); color: var(--accent2); }
+
   #btn-download {
     display: none;
     width: 100%;
@@ -194,6 +330,9 @@
     vertical-align: middle;
     margin-right: 6px;
   }
+
+  /* selection outline on active object */
+  @keyframes pulse-outline { 0%,100%{opacity:.5} 50%{opacity:1} }
 </style>
 </head>
 <body>
@@ -216,10 +355,51 @@
     </select>
   </div>
 
-  <button id="btn-generate" onclick="generate()">Gerar Modelo</button>
+  <button id="btn-generate" onclick="generate()">+ Adicionar à Cena</button>
   <div id="progress-wrap"><div id="progress-bar"></div></div>
-  <div id="status">← descreva um objeto e clique em gerar.</div>
-  <a id="btn-download" download="model.glb">⬇ Baixar .GLB</a>
+  <div id="status">← descreva um objeto e clique em adicionar.</div>
+
+  <div class="divider"></div>
+
+  <!-- Scene objects -->
+  <div id="scene-section">
+    <label>Objetos na Cena</label>
+    <div id="scene-list"></div>
+
+    <!-- Transform controls for selected object -->
+    <div id="transform-controls">
+      <label style="margin-bottom:4px; color: var(--accent);">Posição · <span id="selected-label" style="color:var(--text)"></span></label>
+      <div class="transform-row">
+        <label>X</label>
+        <input type="range" id="tx" min="-5" max="5" step="0.05" value="0" oninput="applyTransform()">
+        <span class="val" id="tx-val">0.00</span>
+      </div>
+      <div class="transform-row">
+        <label>Y</label>
+        <input type="range" id="ty" min="0" max="5" step="0.05" value="0" oninput="applyTransform()">
+        <span class="val" id="ty-val">0.00</span>
+      </div>
+      <div class="transform-row">
+        <label>Z</label>
+        <input type="range" id="tz" min="-5" max="5" step="0.05" value="0" oninput="applyTransform()">
+        <span class="val" id="tz-val">0.00</span>
+      </div>
+      <div class="transform-row">
+        <label style="color:var(--accent2);">S</label>
+        <input type="range" id="ts" min="0.1" max="3" step="0.05" value="1" oninput="applyTransform()">
+        <span class="val" id="ts-val">1.00</span>
+      </div>
+      <div class="transform-row">
+        <label style="color:var(--dim);">R</label>
+        <input type="range" id="tr" min="0" max="360" step="1" value="0" oninput="applyTransform()">
+        <span class="val" id="tr-val">0°</span>
+      </div>
+    </div>
+
+    <button id="btn-clear-scene" onclick="clearScene()">🗑 Limpar Cena</button>
+  </div>
+
+  <a id="btn-download" download="model.glb">⬇ Baixar último .GLB</a>
 </div>
 
 <div id="viewer">
@@ -247,13 +427,13 @@ viewer.appendChild(renderer.domElement);
 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
-camera.position.set(0, 1.2, 3);
+camera.position.set(0, 1.2, 4);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.autoRotate = true;
-controls.autoRotateSpeed = 1.2;
+controls.autoRotateSpeed = 0.8;
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 const key = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -268,21 +448,136 @@ scene.add(rim);
 
 scene.add(new THREE.GridHelper(10, 20, 0x1e1e2e, 0x1e1e2e));
 
-let currentModel = null;
+// ── SCENE OBJECTS REGISTRY ────────────────────────────────────
+// Each entry: { id, label, mesh, proxied_url }
+let sceneObjects = [];
+let selectedId = null;
+let objCounter  = 0;
 
-function resize() {
-  const w = viewer.clientWidth, h = viewer.clientHeight;
-  renderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+function getSelected() {
+  return sceneObjects.find(o => o.id === selectedId) || null;
 }
-resize();
-window.addEventListener('resize', resize);
-(function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+
+// ── SELECTION HIGHLIGHT ───────────────────────────────────────
+const selectionBox = (() => {
+  const geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1,1,1));
+  const mat = new THREE.LineBasicMaterial({ color: 0x7c6dfa, transparent: true, opacity: 0.7 });
+  const box = new THREE.LineSegments(geo, mat);
+  box.visible = false;
+  scene.add(box);
+  return box;
+})();
+
+function updateSelectionBox() {
+  const sel = getSelected();
+  if (!sel) { selectionBox.visible = false; return; }
+  const bb = new THREE.Box3().setFromObject(sel.mesh);
+  const size   = bb.getSize(new THREE.Vector3());
+  const center = bb.getCenter(new THREE.Vector3());
+  selectionBox.scale.copy(size);
+  selectionBox.position.copy(center);
+  selectionBox.visible = true;
+}
+
+// ── SCENE LIST UI ─────────────────────────────────────────────
+function renderSceneList() {
+  const list = document.getElementById('scene-list');
+  list.innerHTML = '';
+  sceneObjects.forEach(obj => {
+    const item = document.createElement('div');
+    item.className = 'scene-item' + (obj.id === selectedId ? ' active' : '');
+    item.innerHTML = `
+      <div class="scene-item-dot"></div>
+      <span class="scene-item-name" title="${obj.label}">${obj.label}</span>
+      <div class="scene-item-actions">
+        <button class="scene-item-btn" title="Visibilidade" onclick="toggleVisibility('${obj.id}', event)">👁</button>
+        <button class="scene-item-btn del" title="Remover" onclick="removeObject('${obj.id}', event)">✕</button>
+      </div>
+    `;
+    item.addEventListener('click', () => selectObject(obj.id));
+    list.appendChild(item);
+  });
+
+  // Show/hide transform controls
+  const tc = document.getElementById('transform-controls');
+  const sel = getSelected();
+  if (sel) {
+    tc.classList.add('visible');
+    document.getElementById('selected-label').textContent = sel.label;
+    // Sync sliders to current mesh state
+    document.getElementById('tx').value = sel.mesh.position.x;
+    document.getElementById('ty').value = sel.mesh.position.y;
+    document.getElementById('tz').value = sel.mesh.position.z;
+    document.getElementById('ts').value = sel.mesh.userData.baseScale || 1;
+    document.getElementById('tr').value = THREE.MathUtils.radToDeg(sel.mesh.rotation.y);
+    updateValLabels();
+  } else {
+    tc.classList.remove('visible');
+  }
+}
+
+function selectObject(id) {
+  selectedId = id;
+  renderSceneList();
+  updateSelectionBox();
+}
+
+function toggleVisibility(id, e) {
+  e.stopPropagation();
+  const obj = sceneObjects.find(o => o.id === id);
+  if (!obj) return;
+  obj.mesh.visible = !obj.mesh.visible;
+  updateSelectionBox();
+}
+
+function removeObject(id, e) {
+  e.stopPropagation();
+  const idx = sceneObjects.findIndex(o => o.id === id);
+  if (idx === -1) return;
+  scene.remove(sceneObjects[idx].mesh);
+  sceneObjects.splice(idx, 1);
+  if (selectedId === id) selectedId = sceneObjects.length ? sceneObjects[sceneObjects.length-1].id : null;
+  updateSelectionBox();
+  renderSceneList();
+  if (sceneObjects.length === 0) hint.style.opacity = '1';
+}
+
+function clearScene() {
+  sceneObjects.forEach(o => scene.remove(o.mesh));
+  sceneObjects = [];
+  selectedId = null;
+  selectionBox.visible = false;
+  hint.style.opacity = '1';
+  renderSceneList();
+}
+
+// ── TRANSFORM SLIDERS ─────────────────────────────────────────
+function updateValLabels() {
+  document.getElementById('tx-val').textContent = parseFloat(document.getElementById('tx').value).toFixed(2);
+  document.getElementById('ty-val').textContent = parseFloat(document.getElementById('ty').value).toFixed(2);
+  document.getElementById('tz-val').textContent = parseFloat(document.getElementById('tz').value).toFixed(2);
+  document.getElementById('ts-val').textContent = parseFloat(document.getElementById('ts').value).toFixed(2);
+  document.getElementById('tr-val').textContent = Math.round(document.getElementById('tr').value) + '°';
+}
+
+function applyTransform() {
+  updateValLabels();
+  const sel = getSelected();
+  if (!sel) return;
+  const x = parseFloat(document.getElementById('tx').value);
+  const y = parseFloat(document.getElementById('ty').value);
+  const z = parseFloat(document.getElementById('tz').value);
+  const s = parseFloat(document.getElementById('ts').value);
+  const r = THREE.MathUtils.degToRad(parseFloat(document.getElementById('tr').value));
+  const base = sel.mesh.userData.baseScale || 1;
+  sel.mesh.position.set(x, y, z);
+  sel.mesh.scale.setScalar(base * s);
+  sel.mesh.rotation.y = r;
+  updateSelectionBox();
+}
 
 // ── LOAD GLB ──────────────────────────────────────────────────
-function loadGLB(url) {
-  if (currentModel) { scene.remove(currentModel); currentModel = null; }
+function loadGLB(url, label) {
   hint.style.opacity = '0';
   new THREE.GLTFLoader().load(url, (gltf) => {
     const model = gltf.scene;
@@ -295,16 +590,36 @@ function loadGLB(url) {
     model.position.y += size.y * scale / 2;
     const box2 = new THREE.Box3().setFromObject(model);
     model.position.y -= box2.min.y;
+
+    // Spread objects slightly so they don't overlap
+    const offset = sceneObjects.length * 2.2;
+    model.position.x += offset;
+
+    model.userData.baseScale = scale;
+
+    const id = 'obj_' + (++objCounter);
+    sceneObjects.push({ id, label, mesh: model, proxied_url: url });
     scene.add(model);
-    currentModel = model;
-    setStatus('Modelo carregado! Arraste pra orbitar.', 'ok');
+
+    selectedId = id;
+    renderSceneList();
+    updateSelectionBox();
+
+    setStatus(`<span class="ok">Modelo adicionado!</span> ${sceneObjects.length} objeto(s) na cena.`);
     setProgress(0);
     document.getElementById('progress-wrap').style.display = 'none';
     btn().disabled = false;
-    btn().innerHTML = 'Gerar Modelo';
-  }, undefined, (err) => {
+    btn().innerHTML = '+ Adicionar à Cena';
+
+    // show download for this model
+    const dlBtn = document.getElementById('btn-download');
+    dlBtn.href = url;
+    dlBtn.style.display = 'block';
+
+  }, undefined, () => {
     setStatus('Erro ao carregar o modelo 3D.', 'err');
-    btn().disabled = false; btn().innerHTML = 'Gerar Modelo';
+    btn().disabled = false;
+    btn().innerHTML = '+ Adicionar à Cena';
   });
 }
 
@@ -324,7 +639,6 @@ async function generate() {
 
   btn().disabled = true;
   btn().innerHTML = '<span class="spinner"></span>Gerando…';
-  document.getElementById('btn-download').style.display = 'none';
   document.getElementById('progress-wrap').style.display = 'block';
   setProgress(5);
   setStatus('Criando task na Tripo AI…', 'info');
@@ -357,30 +671,46 @@ async function generate() {
     }
 
     if (!model_url) throw new Error('Timeout: modelo não ficou pronto.');
-    setProgress(100);
+    setProgress(95);
     setStatus('Carregando modelo…', 'info');
 
     // 3) Proxy the GLB through backend (evita CORS do CDN da Tripo)
     const proxied = `/api/proxy-model?url=${encodeURIComponent(model_url)}`;
 
-    const dlBtn = document.getElementById('btn-download');
-    dlBtn.href = proxied;
-    dlBtn.style.display = 'block';
-
-    loadGLB(proxied);
+    // Truncate label
+    const label = prompt.length > 28 ? prompt.slice(0, 26) + '…' : prompt;
+    loadGLB(proxied, label);
 
   } catch (err) {
     setStatus(err.message, 'err');
     setProgress(0);
     document.getElementById('progress-wrap').style.display = 'none';
     btn().disabled = false;
-    btn().innerHTML = 'Gerar Modelo';
+    btn().innerHTML = '+ Adicionar à Cena';
   }
 }
+
+// ── RESIZE + LOOP ─────────────────────────────────────────────
+function resize() {
+  const w = viewer.clientWidth, h = viewer.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+})();
 
 document.getElementById('prompt').addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.ctrlKey) generate();
 });
+
+// init list
+renderSceneList();
 </script>
 </body>
 </html>
