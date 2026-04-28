@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tripo AI · 3D Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+  :root {
+    --bg: #06060a;
+    --panel: #0e0e16;
+    --border: #1e1e2e;
+    --accent: #7c6dfa;
+    --accent2: #fa6d9a;
+    --text: #c8c4e8;
+    --dim: #5a5670;
+    --white: #f0eeff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── PANEL ── */
+  #panel {
+    width: 290px;
+    min-width: 290px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 28px 22px;
+    gap: 18px;
+    overflow-y: auto;
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 17px;
+    color: var(--white);
+  }
+  .logo span { color: var(--accent); }
+  .divider { height: 1px; background: var(--border); }
+
+  label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--dim);
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 7px;
+  }
+  textarea, select {
+    width: 100%;
+    background: #111120;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--white);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea { resize: vertical; min-height: 90px; }
+  textarea:focus, select:focus { border-color: var(--accent); }
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235a5670' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    cursor: pointer;
+  }
+
+  #btn-generate {
+    width: 100%;
+    padding: 13px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  #btn-generate:hover { opacity: 0.85; }
+  #btn-generate:active { transform: scale(0.98); }
+  #btn-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #status {
+    font-size: 11px;
+    color: var(--dim);
+    line-height: 1.7;
+    min-height: 38px;
+  }
+  #status .ok   { color: #6dfaaa; }
+  #status .err  { color: var(--accent2); }
+  #status .info { color: var(--accent); }
+
+  #progress-wrap {
+    background: var(--border);
+    border-radius: 4px;
+    height: 3px;
+    overflow: hidden;
+    display: none;
+  }
+  #progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.4s ease;
+  }
+
+  #btn-download {
+    display: none;
+    width: 100%;
+    padding: 11px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    color: var(--accent);
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 0.06em;
+    transition: background 0.2s;
+    text-align: center;
+    text-decoration: none;
+  }
+  #btn-download:hover { background: rgba(124,109,250,0.15); }
+
+  /* ── VIEWER ── */
+  #viewer {
+    flex: 1;
+    position: relative;
+    background: radial-gradient(ellipse at 60% 40%, #0d0d20 0%, #06060a 100%);
+  }
+  canvas { display: block; width: 100% !important; height: 100% !important; }
+  #viewer::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(124,109,250,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,109,250,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  #hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    pointer-events: none;
+    transition: opacity 0.5s;
+  }
+  #hint svg { opacity: 0.1; }
+  #hint p { color: var(--dim); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+  #controls-hint {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+    text-align: right;
+    line-height: 1.8;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <div class="logo">tripo<span>·</span>3d</div>
+  <div class="divider"></div>
+
+  <div>
+    <label>Descrição do objeto</label>
+    <textarea id="prompt" placeholder="Ex: a futuristic robot helmet with glowing blue visor"></textarea>
+  </div>
+
+  <div>
+    <label>Qualidade</label>
+    <select id="quality">
+      <option value="draft">Draft (rápido ~30s)</option>
+      <option value="standard" selected>Standard (~1min)</option>
+      <option value="detailed">Detailed (~2min)</option>
+    </select>
+  </div>
+
+  <button id="btn-generate" onclick="generate()">Gerar Modelo</button>
+  <div id="progress-wrap"><div id="progress-bar"></div></div>
+  <div id="status">← descreva um objeto e clique em gerar.</div>
+  <a id="btn-download" download="model.glb">⬇ Baixar .GLB</a>
+</div>
+
+<div id="viewer">
+  <div id="hint">
+    <svg width="72" height="72" viewBox="0 0 80 80" fill="none">
+      <path d="M40 8L72 24V56L40 72L8 56V24L40 8Z" stroke="white" stroke-width="1.5"/>
+      <path d="M40 8V72M8 24L72 56M72 24L8 56" stroke="white" stroke-width="0.8" stroke-dasharray="4 3"/>
+    </svg>
+    <p>o modelo aparece aqui</p>
+  </div>
+  <div id="controls-hint">arrastar · orbitar<br>scroll · zoom<br>shift+drag · pan</div>
+</div>
+
+<script>
+// ── THREE.JS SETUP ─────────────────────────────────────────────
+const viewer = document.getElementById('viewer');
+const hint   = document.getElementById('hint');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+viewer.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+camera.position.set(0, 1.2, 3);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 1.2;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+const key = new THREE.DirectionalLight(0xffffff, 1.2);
+key.position.set(3, 5, 3);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0x7c6dfa, 0.5);
+fill.position.set(-3, 2, -2);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xfa6d9a, 0.4);
+rim.position.set(0, -2, -4);
+scene.add(rim);
+
+scene.add(new THREE.GridHelper(10, 20, 0x1e1e2e, 0x1e1e2e));
+
+let currentModel = null;
+
+function resize() {
+  const w = viewer.clientWidth, h = viewer.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize', resize);
+(function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+
+// ── LOAD GLB ──────────────────────────────────────────────────
+function loadGLB(url) {
+  if (currentModel) { scene.remove(currentModel); currentModel = null; }
+  hint.style.opacity = '0';
+  new THREE.GLTFLoader().load(url, (gltf) => {
+    const model = gltf.scene;
+    const box = new THREE.Box3().setFromObject(model);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const scale = 2 / Math.max(size.x, size.y, size.z);
+    model.scale.setScalar(scale);
+    model.position.sub(center.multiplyScalar(scale));
+    model.position.y += size.y * scale / 2;
+    const box2 = new THREE.Box3().setFromObject(model);
+    model.position.y -= box2.min.y;
+    scene.add(model);
+    currentModel = model;
+    setStatus('Modelo carregado! Arraste pra orbitar.', 'ok');
+    setProgress(0);
+    document.getElementById('progress-wrap').style.display = 'none';
+    btn().disabled = false;
+    btn().innerHTML = 'Gerar Modelo';
+  }, undefined, (err) => {
+    setStatus('Erro ao carregar o modelo 3D.', 'err');
+    btn().disabled = false; btn().innerHTML = 'Gerar Modelo';
+  });
+}
+
+// ── UI ────────────────────────────────────────────────────────
+const btn = () => document.getElementById('btn-generate');
+function setStatus(msg, type='') {
+  document.getElementById('status').innerHTML = type ? `<span class="${type}">${msg}</span>` : msg;
+}
+function setProgress(pct) { document.getElementById('progress-bar').style.width = pct + '%'; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── GENERATE ─────────────────────────────────────────────────
+async function generate() {
+  const prompt  = document.getElementById('prompt').value.trim();
+  const quality = document.getElementById('quality').value;
+  if (!prompt) return setStatus('Digite uma descrição.', 'err');
+
+  btn().disabled = true;
+  btn().innerHTML = '<span class="spinner"></span>Gerando…';
+  document.getElementById('btn-download').style.display = 'none';
+  document.getElementById('progress-wrap').style.display = 'block';
+  setProgress(5);
+  setStatus('Criando task na Tripo AI…', 'info');
+
+  try {
+    // 1) Create task via local backend
+    const createRes = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, quality }),
+    });
+    const { task_id, error: createErr } = await createRes.json();
+    if (!task_id) throw new Error(createErr || 'Falha ao criar task.');
+
+    setStatus(`Task: <code>${task_id}</code> · aguardando…`, 'info');
+    setProgress(15);
+
+    // 2) Poll status
+    let model_url = null;
+    for (let i = 0; i < 120; i++) {
+      await sleep(3000);
+      const pollRes = await fetch(`/api/status/${task_id}`);
+      const { status, progress, model_url: url, error: taskErr } = await pollRes.json();
+
+      setProgress(15 + progress * 0.8);
+      setStatus(`Status: <span class="info">${status}</span> · ${progress}%`);
+
+      if (status === 'success') { model_url = url; break; }
+      if (status === 'failed' || status === 'cancelled') throw new Error(`Task ${status}: ${taskErr || ''}`);
+    }
+
+    if (!model_url) throw new Error('Timeout: modelo não ficou pronto.');
+    setProgress(100);
+    setStatus('Carregando modelo…', 'info');
+
+    // 3) Proxy the GLB through backend (evita CORS do CDN da Tripo)
+    const proxied = `/api/proxy-model?url=${encodeURIComponent(model_url)}`;
+
+    const dlBtn = document.getElementById('btn-download');
+    dlBtn.href = proxied;
+    dlBtn.style.display = 'block';
+
+    loadGLB(proxied);
+
+  } catch (err) {
+    setStatus(err.message, 'err');
+    setProgress(0);
+    document.getElementById('progress-wrap').style.display = 'none';
+    btn().disabled = false;
+    btn().innerHTML = 'Gerar Modelo';
+  }
+}
+
+document.getElementById('prompt').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.ctrlKey) generate();
+});
+</script>
+</body>
+</html>
